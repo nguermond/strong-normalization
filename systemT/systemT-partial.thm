@@ -1,0 +1,489 @@
+Specification "systemT".
+Close tm, ty.
+
+
+
+Define step : tm -> tm -> prop by
+step (app (lam S) U) (S U) ;
+step (lam S) (lam S') := nabla x, step (S x) (S' x) ;
+step (suc U) (suc U') := step U U' ;
+step (app T U) (app T' U) := (step T T') ;
+step (app T U) (app T U') := (step U U') ;
+step (rec U V z) U ;
+step (rec U V (suc N)) (V (rec U V N) N) ;
+step (rec U V T) (rec U V T') := step T T'.
+
+Define sn : tm -> prop by
+sn T := forall T', (step T T') -> sn T'.
+
+Define neutral : tm -> prop by
+neutral (app T U) ;
+nabla x, neutral x ;
+neutral (rec U V T).
+
+
+Define red : ty -> tm -> prop by
+red nat z ;
+red nat (suc U) := red nat U ;
+red (arr A B) (lam S) := forall U, (red A U) -> (red B (S U)) ;
+red B T := neutral T /\ forall T', (step T T') -> (red B T').  %% CR3
+
+
+Theorem red-var : forall A, nabla x, red A x.
+intros. unfold. search. intros. case H1.
+
+Theorem norm-suc : forall U, sn U -> sn (suc U).
+induction on 1.
+intros. case H1.
+unfold. intros. case H3.
+backchain IH. backchain H2.
+
+Theorem norm-lam : forall S, nabla x, sn (S x) -> (sn (lam S)).
+induction on 1.
+intros. case H1. unfold. intros.
+case H3. backchain IH. backchain H2.
+
+Theorem normalizability : forall T A, (red A T) -> (sn T).
+induction on 1.
+intros. case H1.
+%% Case Z
+unfold. intros. case H2.
+%% Case SUC
+apply IH to H2. backchain norm-suc.
+%% Case LAM
+backchain norm-lam.
+backchain IH with A = B.
+backchain H2. backchain red-var.
+%% Case NEU
+unfold. intros. backchain IH with A = A. backchain H3. 
+
+Define freshlst : (list o) -> tm -> prop by
+freshlst nil T ;
+nabla x, freshlst (of x A :: Gamma) T := freshlst Gamma T.
+
+Define subst : (list o) -> (list tm) -> prop by
+subst nil nil ;
+nabla x , subst (of x A :: Gamma) (U :: Subst) :=
+ subst Gamma Subst /\ freshlst Gamma U.
+
+Define redlst : (list o) -> (list tm) -> ty -> tm -> prop by
+redlst nil nil A T := red A T ;
+nabla x , redlst (of x A1 :: Gamma) (U :: Subst) A (T x) := 
+  (red A1 U -> 
+    redlst Gamma Subst A (T U)).
+
+
+Theorem redlst-lam : forall Gamma Subst A B S,
+(subst Gamma Subst)
+-> (forall U, nabla x, freshlst Gamma U -> 
+     redlst (of x A :: Gamma) (U :: Subst) B (S x))
+-> (redlst Gamma Subst (arr A B) (lam S)).
+
+induction on 1.
+intros. case H1.
+%% NIL Case
+unfold. unfold. intros.
+apply H2 to _ with U = U.
+case H4. apply H5 to H3. 
+case H6. search.
+%% CONS Case
+unfold. intros.
+backchain IH.
+intros. unfold. intros.
+apply H2 to _ with U1 = U1.
+case H8. apply H9 to H7.
+case H10. 
+backchain H11.
+
+Theorem redlst-z : forall Gamma Subst,
+(subst Gamma Subst)
+-> (redlst Gamma Subst nat z).
+induction on 1.
+intros.
+case H1.
+%% NIL Case
+search.
+%% CONS Case
+unfold. intros. backchain IH.
+
+Theorem redlst-suc : forall Gamma Subst U,
+(subst Gamma Subst)
+-> (redlst Gamma Subst nat U)
+-> (redlst Gamma Subst nat (suc U)).
+induction on 1.
+intros. case H1.
+%% NIL Case
+case H2. search.
+%% CONS Case
+case H2.
+unfold. intros.
+apply H5 to H6.
+apply IH to H3 H7.
+search.
+
+Theorem norm-step : forall T T', (sn T) -> (step T T') -> (sn T').
+intros. case H1. apply H3 to H2. search.
+
+Theorem step-subst : forall S S' U, nabla (x : tm), step (S x) (S' x) -> step (S U) (S' U).
+induction on 1. intros. case H1.
+search.
+unfold. intros.
+apply IH to H2 with S = (x \ S1 x n2), S' = (x \ S'1 x n2), U = U. search.
+unfold. apply IH to H2 with U = U. search.
+apply IH to H2 with U = U. search.
+apply IH to H2 with U = U. search.
+search.
+search.
+apply IH to H2 with U = U. search.
+
+%% CR2
+Theorem red-step : forall A T T', red A T -> (step T T') -> red A T'.
+induction on 1.
+intros. case H1.
+%% Case Z
+case H2.
+%% Case SUC
+case H2.
+unfold. backchain IH.
+%% Case LAM
+case H2. unfold.
+intros.
+backchain IH with T = (S U).
+backchain H3.
+apply step-subst to H4 with U = U. search.
+%% Case NEU
+backchain H4.
+
+Theorem red-app : forall T U A B,
+(red (arr A B) T)
+-> (red A U)
+-> (red B (app T U)).
+intros.
+apply normalizability to H1.
+apply normalizability to H2.
+clear -> H1 H2 H3 H4 A B U T.
+induction on 2.
+induction on 1.
+intros. unfold. search.
+intros. case H9.
+%% Case (step (app (lam S) U) (S U))
+case H8. backchain H10. case H10.
+
+%% Case (step (app T U) (app T' U))
+backchain IH. case H6. backchain H11.
+backchain red-step.
+
+%% Case (step (app T U) (app T U'))
+case H5.
+backchain IH1 with A = A. backchain H11.
+backchain red-step.
+
+Theorem red-rec-suc : forall B C F U,
+sn U -> red nat U
+-> red (arr B (arr nat B)) (lam x \ lam y \ F x y)
+-> red B (rec C F U)
+-> red B (rec C F (suc U)).
+induction on 1.
+intros.
+case H1.
+unfold. search. intros.
+case H6.
+case H3. apply H7 to H4.
+case H8. apply H9 to H2. search.
+case H9. case H7.
+case H7.
+backchain IH.
+backchain H5.
+backchain red-step.
+backchain red-step.
+
+Theorem red-rec : forall B C F U,
+red B C
+-> red (arr B (arr nat B)) (lam x \ lam y \ F x y)
+-> red nat U
+-> red B (rec C F U).
+intros.
+clear -> H3 U.
+induction on 1.
+intros.
+unfold. search.
+intros. case H5.
+
+%% Case Z
+search.
+
+%% Case SUC
+case H4.
+apply IH to H6.
+case H2.
+apply H8 to H7.
+case H9.
+apply H10 to H6.
+search.
+case H10. case H8. case H6.
+
+%% Case U -> U' 
+case H4. case H6. case H6.
+apply IH to H7.
+backchain red-step with T = (rec C F (suc U1)).
+backchain red-rec-suc.
+apply normalizability to H7. search.
+
+%% Case NEU
+apply H8 to H6.
+apply IH to H9.
+search.
+
+
+Theorem redlst-app : forall Gamma Subst T U A B,
+subst Gamma Subst -> (redlst Gamma Subst (arr A B) T)
+-> (redlst Gamma Subst A U)
+-> (redlst Gamma Subst B (app T U)).
+induction on 1.
+intros. case H1.
+unfold. case H2. case H3.
+backchain red-app.
+
+unfold. intros.
+case H2. case H3.
+apply H7 to H6.
+apply H8 to H6.
+apply IH to H4 H9 _.
+search.
+
+Define fresh : tm -> A -> prop by
+nabla x , fresh x T.
+
+Define ctx : (list o) -> prop by
+ctx nil ; nabla x , ctx (of x A :: Gamma) := {typ A} /\ ctx Gamma.
+
+Theorem mem-ctx-fresh : forall Gamma F, nabla x ,
+ctx Gamma -> member (F x) Gamma -> (fresh x (F x)).
+induction on 1.
+intros.
+case H1. case H2.
+case H2. search.
+apply IH to H4 H5 with x = n1.
+case H6. search.
+
+
+Theorem mem-ctx : forall F Gamma, (ctx Gamma)
+-> (member F Gamma) -> (exists T A, F = of T A).
+induction on 1.
+intros.
+case H1. case H2.
+case H2.
+search. apply IH to H4 H5.
+search.
+
+
+Theorem typ-ctx : forall Gamma A, (ctx Gamma) -> {Gamma |- typ A} -> {typ A}.
+induction on 2. intros. case H2.
+  search.
+  apply IH to H1 H3. apply IH to H1 H4. search.
+  apply mem-ctx to H1 H4. case H3.
+
+
+Theorem redlst-mem-lem : forall Gamma Subst A U,
+(subst Gamma Subst) ->
+freshlst Gamma U -> 
+red A U -> redlst Gamma Subst A U.
+
+induction on 1.
+intros. case H1.
+search. 
+
+case H2.
+apply IH to H4 _ H3.
+unfold.
+search.
+
+Theorem redlst-mem : forall Subst A T Gamma,
+ctx Gamma ->
+member (of T A) Gamma ->
+subst Gamma Subst -> redlst Gamma Subst A T.
+induction on 3.
+intros.
+case H3.
+case H2.
+case H2.
+unfold. intros.
+backchain redlst-mem-lem.
+apply mem-ctx-fresh to _ H6. case H1. search.
+case H7.
+apply IH to _ H6 H4. case H1. search.
+unfold.
+search.
+
+Theorem redlst-rec : forall Gamma Subst B C F U,
+(subst Gamma Subst)
+-> (redlst Gamma Subst B C)
+-> (redlst Gamma Subst (arr B (arr nat B)) (lam x \ lam y \ F x y))
+-> (redlst Gamma Subst nat U)
+-> (redlst Gamma Subst B (rec C F U)).
+induction on 1.
+intros.
+case H1.
+%% Case NIL
+case H2. case H3. case H4.
+unfold.
+backchain red-rec.
+%% Case CONS
+unfold. intros.
+case H2. apply H8 to H7.
+case H3. apply H10 to H7.
+case H4. apply H12 to H7.
+backchain IH. 
+
+Theorem reducibility : forall Gamma T A Subst, (ctx Gamma) -> {typ A} ->
+(subst Gamma Subst) -> {Gamma |- of T A} -> (redlst Gamma Subst A T).
+induction on 4.
+intros.
+case H4.
+
+% Case LAM:
+case H2.
+backchain redlst-lam.
+intros.
+backchain IH.
+
+% Case APP:
+apply IH to _ _ H3 H6.
+backchain typ-ctx.
+apply IH to _ _ H3 H7.
+backchain typ-ctx.
+apply redlst-app to _ _ _.
+search.
+
+%% Case Z
+backchain redlst-z.
+
+%% Case SUC
+backchain redlst-suc.
+backchain IH.
+
+%% Case REC
+apply IH to _ _ H3 H5.
+apply IH to _ _ H3 H7.
+backchain redlst-rec.
+apply IH to _ _ H3 H6.
+search.
+
+%% Case VAR
+assert (ctx Gamma). 
+apply mem-ctx to _ H6.
+apply redlst-mem to _ H6 _.
+case H5.
+search.
+
+
+Define idsubst : (list o) -> (list tm) -> tm -> prop by
+idsubst nil nil T ;
+nabla x y, idsubst (of x A :: Gamma) (y :: Subst) (T x) :=
+nabla x, idsubst Gamma Subst (T x).
+
+
+Theorem idsubst-freshness-lemma : forall Subst Gamma T, nabla x,
+idsubst Gamma (Subst x) (T x) -> fresh x (Subst x) \/ fresh x (T x).
+induction on 1.
+intros.
+case H1. search.
+apply IH to H2 with x = n1.
+case H3. case H4.
+search. case H4.
+search. search.
+
+Theorem freshlstvar : forall Gamma, nabla x,
+ctx Gamma -> freshlst Gamma x.
+induction on 1.
+intros.
+case H1.
+search.
+unfold.
+backchain IH.
+
+
+Theorem idsubst-ex : forall Gamma T,
+ctx Gamma ->
+exists Subst,
+(subst Gamma Subst)
+/\ (idsubst Gamma Subst T).
+induction on 1.
+intros.
+case H1. search.
+apply IH to H3 with T = (T n1).
+apply idsubst-freshness-lemma to H5. case H6.
+case H7.
+witness (n2 :: T1).
+split. unfold. search. 
+backchain freshlstvar.
+search. case H7.
+witness (n2 :: Subst n3).
+split. unfold. search.
+backchain freshlstvar.
+unfold. search.
+
+
+Define substtm : (list o) -> (list tm) -> tm -> tm -> prop by
+substtm nil nil T T ;
+nabla x y, substtm (of x A :: Gamma) (y :: Subst) (T x) (T' y) :=
+nabla y, substtm Gamma Subst (T y) (T' y).
+
+
+Theorem sn-lemma : forall T T' A Gamma Subst, (ctx Gamma) -> (idsubst Gamma Subst T)
+-> {typ A} -> redlst Gamma Subst A T -> substtm Gamma Subst T T' -> sn T'.
+induction on 2.
+intros.
+case H2.
+case H4. case H5.
+backchain normalizability.
+
+case H4. case H5.
+apply IH to _ H6 H3 _ H8.
+permute (n1 n2) H7.
+backchain H7.
+case H1. backchain red-var.
+case H1. search. search.
+
+
+Theorem sn-renaming : forall T T' Gamma Subst,
+idsubst Gamma Subst T
+-> substtm Gamma Subst T T'
+-> (sn T')
+-> (sn T).
+induction on 1.
+intros.
+case H1.
+case H2. search.
+
+case H2.
+case H5. search.
+case H4.
+permute (n4 n2 n1) H3.
+permute (n3 n2).
+apply IH to H7 H6 H3.
+search.
+
+Theorem substtm-ex : forall T Gamma Subst,
+(idsubst Gamma Subst T)
+-> exists T', substtm Gamma Subst T T'.
+induction on 1.
+intros. case H1.
+search.
+apply IH to H2.
+search.
+
+Theorem strong-normalizability : forall T Gamma A,
+{typ A}
+-> (ctx Gamma)
+-> {Gamma |- of T A}
+-> (sn T).
+intros.
+apply idsubst-ex to H2 with T = T.
+apply reducibility to H2 H1 H4 H3.
+apply substtm-ex to H5.
+apply sn-renaming to H5 H7 _.
+apply sn-lemma to _ H5 _ H6 _.
+search.
+search.
+
