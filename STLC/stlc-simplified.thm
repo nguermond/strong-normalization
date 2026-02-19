@@ -1,0 +1,46 @@
+Specification "stlc".
+
+Type c tm.
+Close tm, ty.
+
+Define step : tm -> tm -> prop by
+step (app (lam S) U) (S U) ;
+step (lam S) (lam S') := step (S c) (S' c) ;
+step (app T U) (app T' U) := (step T T') ;
+step (app T U) (app T U') := (step U U').
+
+Define sn : tm -> prop by
+sn T := forall T', (step T T') -> sn T'.
+
+Define neutral : tm -> prop by
+neutral (app T U) ;
+neutral c.
+
+Define red : ty -> tm -> prop by
+red unit star ;
+red (arr A B) (lam S) := forall U, (red A U) -> (red B (S U)) ;
+red B T := neutral T /\ forall T', (step T T') -> (red B T').  %% CR3
+
+
+Theorem red-var : forall A, red A c.
+intros. unfold. search. intros. case H1.
+
+
+Theorem norm-lam : forall S, sn (S c) -> (sn (lam S)).
+induction on 1.
+intros. case H1. unfold. intros.
+case H3. backchain IH. backchain H2.
+
+%% Prove normalizability by induction on reducibility
+Theorem normalizability : forall T A, (red A T) -> (sn T).
+induction on 1.
+intros. case H1.
+%% Case STAR
+unfold. intros. case H2.
+%% Case LAM
+backchain norm-lam.
+backchain IH with A = B.
+backchain H2.
+backchain red-var.
+%% Case NEU
+unfold. intros. backchain IH with A = A. backchain H3.
